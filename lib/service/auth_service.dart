@@ -4,60 +4,56 @@ import 'package:inventory_apps/config/api_config.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthService {
-  static Future<bool> login(String username, String password) async {
+  static Future<bool> login(
+    String username,
+    String password,
+  ) async {
     final url = "${ApiConfig.baseUrl}/login";
-
-    print("Menembak ke URL: $url");
-    print("Data yang dikirim: username=$username, password=$password");
 
     try {
       final response = await http.post(
         Uri.parse(url),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'username': username, 'password': password}),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'username': username,
+          'password': password,
+        }),
       );
 
-      print("Status Code dari Server: ${response.statusCode}");
-      print("Respon Body dari Server: ${response.body}");
-
       if (response.statusCode == 200) {
-        final Map<String, dynamic> responseData = jsonDecode(response.body);
+        final data = jsonDecode(response.body);
 
-        // Ambil token dan data user dari response API
-        final String token = responseData['data']['token'];
-        final String name = responseData['data']['user']['name'];
+        final token = data['data']['token'];
+        final name = data['data']['user']['name'];
 
-        // Simpan ke SharedPreferences
         final prefs = await SharedPreferences.getInstance();
 
-        await prefs.setString('token', token);
-        await prefs.setString('name', name);
-
-        print("BEARER TOKEN BERHASIL DISIMPAN: $token");
-        print("NAMA USER BERHASIL DISIMPAN: $name");
-
-        return true;
-      } else {
-        print(
-          "Login gagal: Server merespon dengan status ${response.statusCode}",
+        await prefs.setString(
+          'token',
+          'Bearer $token',
         );
 
-        return false;
-      }
-    } catch (e) {
-      print('Error Login pada block catch: $e');
+        await prefs.setString(
+          'name',
+          name,
+        );
 
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      print(e);
       return false;
     }
   }
 
-  /// Logout
   static Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
 
     await prefs.remove('token');
     await prefs.remove('name');
-
-    print("Session dihapus. Kunci token telah dibuang!");
   }
 }

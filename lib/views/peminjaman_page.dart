@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:inventory_apps/models/loan_model.dart';
+import 'package:inventory_apps/service/loan_service.dart';
 
 class PeminjamanPage extends StatefulWidget {
   const PeminjamanPage({super.key});
@@ -7,58 +9,44 @@ class PeminjamanPage extends StatefulWidget {
 }
 
 class _PeminjamanPageState extends State<PeminjamanPage> {
-  final List<Map<String, dynamic>> _peminjamanList = [
-    {
-      'id': 1,
-      'nama': 'Budi Santoso',
-      'barang': 'Laptop Dell XPS',
-      'jumlah': 1,
-      'tanggal': '06 Mei 2025',
-      'keterangan': 'Untuk presentasi proyek',
-    },
-    {
-      'id': 2,
-      'nama': 'Rina Kartika',
-      'barang': 'Kamera Canon EOS',
-      'jumlah': 2,
-      'tanggal': '05 Mei 2025',
-      'keterangan': 'Dokumentasi acara',
-    },
-    {
-      'id': 3,
-      'nama': 'Sari Dewi',
-      'barang': 'Tripod Profesional',
-      'jumlah': 3,
-      'tanggal': '03 Mei 2025',
-      'keterangan': 'Kegiatan outdoor',
-    },
-    {
-      'id': 4,
-      'nama': 'Maya Putri',
-      'barang': 'Speaker JBL',
-      'jumlah': 2,
-      'tanggal': '01 Mei 2025',
-      'keterangan': 'Event seminar',
-    },
-    {
-      'id': 5,
-      'nama': 'Doni Saputra',
-      'barang': 'Proyektor Epson',
-      'jumlah': 1,
-      'tanggal': '30 Apr 2025',
-      'keterangan': 'Rapat divisi',
-    },
-    {
-      'id': 6,
-      'nama': 'Lina Marlina',
-      'barang': 'Mic Wireless Boya',
-      'jumlah': 1,
-      'tanggal': '28 Apr 2025',
-      'keterangan': 'Workshop internal',
-    },
-  ];
+  final LoanService _loanService = LoanService();
 
-  /// Menampilkan dialog konfirmasi untuk mengembalikan barang peminjaman
+  List<LoanModel> _peminjamanList = []; // List dari API
+  int _currentPage = 1;
+  int _totalPage = 1;
+  int _totalDataKeseluruhan = 0;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchData(page: 1);
+  }
+
+  // ==========================================
+  // FUNGSI GET DATA DENGAN PAGINATION
+  // ==========================================
+  Future<void> _fetchData({required int page}) async {
+    setState(() => _isLoading = true);
+
+    _currentPage = page;
+
+    final result = await _loanService.fetchLoans(page: _currentPage, limit: 5);
+
+    if (result != null) {
+      setState(() {
+        _peminjamanList = result['loans'] as List<LoanModel>;
+        _totalPage = result['totalPage'];
+        _totalDataKeseluruhan = result['totalData'];
+      });
+    }
+
+    setState(() => _isLoading = false);
+  }
+
+  // ==========================================
+  // DIALOG KEMBALIKAN BARANG
+  // ==========================================
   void _showKembalikanDialog(int id) {
     showDialog(
       context: context,
@@ -69,9 +57,7 @@ class _PeminjamanPageState extends State<PeminjamanPage> {
           'Kembalikan Barang',
           style: TextStyle(fontWeight: FontWeight.w800),
         ),
-        content: const Text(
-          'Apakah Anda yakin barang ini sudah dikembalikan?',
-        ),
+        content: const Text('Apakah Anda yakin barang ini sudah dikembalikan?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
@@ -83,14 +69,18 @@ class _PeminjamanPageState extends State<PeminjamanPage> {
           ElevatedButton(
             onPressed: () {
               setState(
-                () => _peminjamanList.removeWhere((item) => item['id'] == id),
+                () => _peminjamanList.removeWhere((item) => item.id == id),
               );
               Navigator.pop(dialogContext);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: const Row(
                     children: [
-                      Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                      Icon(
+                        Icons.check_circle_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
                       SizedBox(width: 8),
                       Text(
                         'Barang berhasil dikembalikan!',
@@ -130,7 +120,9 @@ class _PeminjamanPageState extends State<PeminjamanPage> {
       body: SafeArea(
         child: Column(
           children: [
-            // AppBar
+            // ==========================================
+            // APP BAR
+            // ==========================================
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
               decoration: const BoxDecoration(
@@ -184,7 +176,7 @@ class _PeminjamanPageState extends State<PeminjamanPage> {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      '${_peminjamanList.length} data',
+                      '$_totalDataKeseluruhan data', // ✅ dari API
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
@@ -252,97 +244,168 @@ class _PeminjamanPageState extends State<PeminjamanPage> {
               ),
             ),
 
-            // List Peminjaman
+            // ==========================================
+            // LIST PEMINJAMAN
+            // ==========================================
             Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
-                itemCount: _peminjamanList.length,
-                itemBuilder: (_, index) {
-                  final peminjaman = _peminjamanList[index];
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(18),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x08000000),
-                          blurRadius: 12,
-                          offset: Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 50,
-                            height: 50,
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFFEFF6FF), Color(0xFFDBEAFE)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
+              child: _isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFF2563EB),
+                      ),
+                    )
+                  : _peminjamanList.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'Tidak ada data peminjaman',
+                        style: TextStyle(color: Color(0xFF94A3B8)),
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                      itemCount: _peminjamanList.length,
+                      itemBuilder: (_, index) {
+                        final peminjaman =
+                            _peminjamanList[index]; // ✅ LoanModel
+
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(18),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x08000000),
+                                blurRadius: 12,
+                                offset: Offset(0, 4),
                               ),
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: const Icon(
-                              Icons.person_rounded,
-                              color: Color(0xFF2563EB),
-                              size: 26,
-                            ),
+                            ],
                           ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Row(
                               children: [
-                                Text(
-                                  peminjaman['nama'],
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w700,
-                                    color: Color(0xFF1E293B),
+                                Container(
+                                  width: 50,
+                                  height: 50,
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      colors: [
+                                        Color(0xFFEFF6FF),
+                                        Color(0xFFDBEAFE),
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: const Icon(
+                                    Icons.person_rounded,
+                                    color: Color(0xFF2563EB),
+                                    size: 26,
                                   ),
                                 ),
-                                const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.inventory_2_outlined,
-                                      size: 12,
-                                      color: Color(0xFF94A3B8),
-                                    ),
-                                    const SizedBox(width: 3),
-                                    Flexible(
-                                      child: Text(
-                                        '${peminjaman['barang']} · ${peminjaman['jumlah']} unit',
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        peminjaman
+                                            .name, // ✅ dari peminjaman['nama']
                                         style: const TextStyle(
-                                          fontSize: 11,
-                                          color: Color(0xFF94A3B8),
-                                          fontWeight: FontWeight.w500,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w700,
+                                          color: Color(0xFF1E293B),
                                         ),
-                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.inventory_2_outlined,
+                                            size: 12,
+                                            color: Color(0xFF94A3B8),
+                                          ),
+                                          const SizedBox(width: 3),
+                                          Flexible(
+                                            child: Text(
+                                              // ✅ dari peminjaman['barang'] & ['jumlah']
+                                              '${peminjaman.item?.name ?? "Barang tidak ditemukan"} · ${peminjaman.totalItem} unit',
+                                              style: const TextStyle(
+                                                fontSize: 11,
+                                                color: Color(0xFF94A3B8),
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.calendar_today_outlined,
+                                            size: 12,
+                                            color: Color(0xFF94A3B8),
+                                          ),
+                                          const SizedBox(width: 3),
+                                          Text(
+                                            peminjaman
+                                                .date, // ✅ dari peminjaman['tanggal']
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              color: Color(0xFF94A3B8),
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFEFF6FF),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: const Text(
+                                        'Dipinjam',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          color: Color(0xFF2563EB),
+                                        ),
                                       ),
                                     ),
-                                  ],
-                                ),
-                                const SizedBox(height: 2),
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.calendar_today_outlined,
-                                      size: 12,
-                                      color: Color(0xFF94A3B8),
-                                    ),
-                                    const SizedBox(width: 3),
-                                    Text(
-                                      peminjaman['tanggal'],
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        color: Color(0xFF94A3B8),
-                                        fontWeight: FontWeight.w500,
+                                    const SizedBox(height: 8),
+                                    GestureDetector(
+                                      onTap: () => _showKembalikanDialog(
+                                        peminjaman.id,
+                                      ), // ✅
+                                      child: Container(
+                                        width: 30,
+                                        height: 30,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFECFDF5),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                        child: const Icon(
+                                          Icons.assignment_return_rounded,
+                                          size: 16,
+                                          color: Color(0xFF10B981),
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -350,58 +413,109 @@ class _PeminjamanPageState extends State<PeminjamanPage> {
                               ],
                             ),
                           ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFEFF6FF),
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: const Text(
-                                  'Dipinjam',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    color: Color(0xFF2563EB),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              // Ikon Kembalikan (menggantikan ikon tong sampah)
-                              GestureDetector(
-                                onTap: () => _showKembalikanDialog(
-                                  peminjaman['id'],
-                                ),
-                                child: Container(
-                                  width: 30,
-                                  height: 30,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFECFDF5),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: const Icon(
-                                    Icons.assignment_return_rounded,
-                                    size: 16,
-                                    color: Color(0xFF10B981),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
             ),
+
+            // ==========================================
+            // PAGINATION CONTROLS
+            // ==========================================
+            _buildPaginationControls(),
           ],
         ),
+      ),
+    );
+  }
+
+  // ==========================================
+  // WIDGET PAGINATION
+  // ==========================================
+  Widget _buildPaginationControls() {
+    if (_totalPage <= 1) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x0A000000),
+            blurRadius: 4,
+            offset: Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Tombol Prev
+          IconButton(
+            onPressed: _currentPage > 1 && !_isLoading
+                ? () => _fetchData(page: _currentPage - 1)
+                : null,
+            icon: Icon(
+              Icons.chevron_left_rounded,
+              color: _currentPage > 1 ? const Color(0xFF2563EB) : Colors.grey,
+            ),
+          ),
+
+          // Angka halaman
+          Row(
+            children: List.generate(_totalPage, (index) {
+              final pageNumber = index + 1;
+              final isActive = pageNumber == _currentPage;
+
+              return GestureDetector(
+                onTap: !_isLoading && !isActive
+                    ? () => _fetchData(page: pageNumber)
+                    : null,
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: isActive
+                        ? const Color(0xFF2563EB)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isActive
+                          ? const Color(0xFF2563EB)
+                          : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(
+                      '$pageNumber',
+                      style: TextStyle(
+                        color: isActive
+                            ? Colors.white
+                            : const Color(0xFF475569),
+                        fontWeight: isActive
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+
+          // Tombol Next
+          IconButton(
+            onPressed: _currentPage < _totalPage && !_isLoading
+                ? () => _fetchData(page: _currentPage + 1)
+                : null,
+            icon: Icon(
+              Icons.chevron_right_rounded,
+              color: _currentPage < _totalPage
+                  ? const Color(0xFF2563EB)
+                  : Colors.grey,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -1,37 +1,110 @@
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:inventory_apps/models/item_model.dart';
 import 'package:inventory_apps/widgets/form/build_text_field.dart';
+import 'package:inventory_apps/service/item_service.dart';
 
 class DataBarangPage extends StatefulWidget {
   const DataBarangPage({super.key});
+
   @override
   State<DataBarangPage> createState() => _DataBarangPageState();
 }
 
 class _DataBarangPageState extends State<DataBarangPage> {
-  final List<Map<String, dynamic>> _barangList = [
-    {'id': 1, 'nama': 'Laptop Dell XPS 15', 'stok': 8, 'image': null},
-    {'id': 2, 'nama': 'Proyektor Epson EB-X51', 'stok': 3, 'image': null},
-    {'id': 3, 'nama': 'Kamera Canon EOS M50', 'stok': 5, 'image': null},
-    {'id': 4, 'nama': 'Tripod Profesional', 'stok': 10, 'image': null},
-    {'id': 5, 'nama': 'Mic Wireless Boya', 'stok': 6, 'image': null},
-    {'id': 6, 'nama': 'Speaker JBL Portable', 'stok': 4, 'image': null},
-    {'id': 7, 'nama': 'Whiteboard 120x240', 'stok': 2, 'image': null},
-    {'id': 8, 'nama': 'Mouse Logitech MX', 'stok': 12, 'image': null},
-  ];
-
   final ImagePicker _picker = ImagePicker();
+  final ItemService _apiService = ItemService(); // ✅ fix typo
 
-  /// Menampilkan form bottom sheet untuk tambah atau edit barang
-  void _showBarangFormDialog({Map<String, dynamic>? barang}) {
-    final isEdit = barang != null;
-    final namaController = TextEditingController(text: barang?['nama'] ?? '');
-    final stokController = TextEditingController(
-      text: barang?['stok']?.toString() ?? '',
+  late Future<List<ItemModel>> _itemsFuture;
+  int _totalItems = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshData();
+  }
+
+  // ==========================================
+  // FUNGSI GET (BACA DATA)
+  // ==========================================
+  void _refreshData() {
+    setState(() {
+      _itemsFuture = _apiService.getItems().then((items) {
+        setState(() => _totalItems = items.length);
+        return items;
+      });
+    });
+  }
+
+  // ==========================================
+  // SNACKBAR UMUM (sukses & error)
+  // ==========================================
+  void _showSnackBar(BuildContext ctx, String message, {bool isError = true}) {
+    ScaffoldMessenger.of(ctx).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              isError
+                  ? Icons.warning_amber_rounded
+                  : Icons.check_circle_outline_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor:
+            isError ? const Color(0xFFEF4444) : const Color(0xFF10B981),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 2),
+      ),
     );
-    File? selectedImage = barang?['image'];
+  }
+
+  // ==========================================
+  // FUNGSI DELETE (HAPUS DATA)
+  // ==========================================
+  Future<void> _prosesHapus(int id, BuildContext dialogContext) async {
+    Navigator.pop(dialogContext);
+
+    try {
+      await _apiService.deleteItem(id);
+      if (mounted) {
+        _showSnackBar(context, 'Barang berhasil dihapus!', isError: false);
+        _refreshData();
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSnackBar(context, 'Gagal menghapus: $e', isError: true);
+      }
+    }
+  }
+
+  // ==========================================
+  // DIALOG FORM CREATE & UPDATE
+  // ==========================================
+  void _showBarangFormDialog({ItemModel? barang}) {
+    final isEdit = barang != null;
+    final namaController = TextEditingController(text: barang?.name ?? '');
+    final stokController = TextEditingController(
+      text: barang?.stock.toString() ?? '',
+    );
+    File? selectedImage = barang?.localImage;
+    Uint8List? selectedImageBytes;
     final formKey = GlobalKey<FormState>();
+    bool isSubmitting = false;
 
     showModalBottomSheet(
       context: context,
@@ -53,6 +126,7 @@ class _DataBarangPageState extends State<DataBarangPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Handle bar
                   Container(
                     width: 40,
                     height: 4,
@@ -72,7 +146,6 @@ class _DataBarangPageState extends State<DataBarangPage> {
                   ),
                   const SizedBox(height: 24),
 
-                  // Nama Barang (Wajib)
                   buildTextField(
                     namaController,
                     'Nama Barang *',
@@ -80,7 +153,6 @@ class _DataBarangPageState extends State<DataBarangPage> {
                   ),
                   const SizedBox(height: 14),
 
-                  // Stok (Wajib)
                   buildTextField(
                     stokController,
                     'Jumlah Stok *',
@@ -89,7 +161,7 @@ class _DataBarangPageState extends State<DataBarangPage> {
                   ),
                   const SizedBox(height: 14),
 
-                  // Image Picker (Wajib)
+                  // Image Picker
                   GestureDetector(
                     onTap: () async {
                       final XFile? image = await _picker.pickImage(
@@ -99,8 +171,10 @@ class _DataBarangPageState extends State<DataBarangPage> {
                         imageQuality: 80,
                       );
                       if (image != null) {
+                        final bytes = await image.readAsBytes();
                         setModalState(() {
-                          selectedImage = File(image.path);
+                          selectedImage = kIsWeb ? null : File(image.path);
+                          selectedImageBytes = bytes;
                         });
                       }
                     },
@@ -111,22 +185,27 @@ class _DataBarangPageState extends State<DataBarangPage> {
                         color: const Color(0xFFF8FAFC),
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                          color: selectedImage != null
+                          color: selectedImageBytes != null
                               ? const Color(0xFF2563EB)
                               : const Color(0xFFE2E8F0),
-                          width: selectedImage != null ? 2 : 1,
+                          width: selectedImageBytes != null ? 2 : 1,
                         ),
                       ),
-                      child: selectedImage != null
+                      child: selectedImageBytes != null
                           ? ClipRRect(
                               borderRadius: BorderRadius.circular(13),
                               child: Stack(
                                 fit: StackFit.expand,
                                 children: [
-                                  Image.file(
-                                    selectedImage!,
-                                    fit: BoxFit.cover,
-                                  ),
+                                  kIsWeb
+                                      ? Image.memory(
+                                          selectedImageBytes!,
+                                          fit: BoxFit.cover,
+                                        )
+                                      : Image.file(
+                                          selectedImage!,
+                                          fit: BoxFit.cover,
+                                        ),
                                   Positioned(
                                     top: 8,
                                     right: 8,
@@ -148,37 +227,21 @@ class _DataBarangPageState extends State<DataBarangPage> {
                                 ],
                               ),
                             )
-                          : Column(
+                          : const Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Container(
-                                  width: 48,
-                                  height: 48,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFEFF6FF),
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                  child: const Icon(
-                                    Icons.add_photo_alternate_outlined,
-                                    color: Color(0xFF2563EB),
-                                    size: 24,
-                                  ),
+                                Icon(
+                                  Icons.add_photo_alternate_outlined,
+                                  color: Color(0xFF2563EB),
+                                  size: 24,
                                 ),
-                                const SizedBox(height: 8),
-                                const Text(
+                                SizedBox(height: 8),
+                                Text(
                                   'Pilih Gambar dari Galeri *',
                                   style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
                                     color: Color(0xFF64748B),
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                const Text(
-                                  'JPG, PNG (Maks 1MB)',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Color(0xFF94A3B8),
                                   ),
                                 ),
                               ],
@@ -187,79 +250,97 @@ class _DataBarangPageState extends State<DataBarangPage> {
                   ),
                   const SizedBox(height: 24),
 
-                  // Submit button
+                  // ==========================================
+                  // TOMBOL EKSEKUSI POST / PUT
+                  // ==========================================
                   SizedBox(
                     width: double.infinity,
                     height: 52,
                     child: ElevatedButton(
-                      onPressed: () {
-                        // Validasi semua field wajib
-                        if (namaController.text.trim().isEmpty) {
-                          _showValidationSnackBar(
-                            bottomSheetContext,
-                            'Nama barang wajib diisi!',
-                          );
-                          return;
-                        }
-                        if (stokController.text.trim().isEmpty ||
-                            int.tryParse(stokController.text.trim()) == null) {
-                          _showValidationSnackBar(
-                            bottomSheetContext,
-                            'Jumlah stok wajib diisi dengan angka!',
-                          );
-                          return;
-                        }
-                        if (selectedImage == null && !isEdit) {
-                          _showValidationSnackBar(
-                            bottomSheetContext,
-                            'Gambar wajib dipilih!',
-                          );
-                          return;
-                        }
+                      onPressed: isSubmitting
+                          ? null
+                          : () async {
+                              if (namaController.text.trim().isEmpty ||
+                                  stokController.text.trim().isEmpty) {
+                                _showSnackBar(
+                                  bottomSheetContext,
+                                  'Lengkapi form!',
+                                  isError: true,
+                                );
+                                return;
+                              }
+                              // ✅ cek selectedImageBytes untuk support web
+                              if (selectedImageBytes == null && !isEdit) {
+                                _showSnackBar(
+                                  bottomSheetContext,
+                                  'Gambar wajib dipilih!',
+                                  isError: true,
+                                );
+                                return;
+                              }
 
-                        setState(() {
-                          if (isEdit) {
-                            final index = _barangList.indexWhere(
-                              (item) => item['id'] == barang['id'],
-                            );
-                            if (index != -1) {
-                              _barangList[index] = {
-                                'id': barang['id'],
-                                'nama': namaController.text.trim(),
-                                'stok':
-                                    int.tryParse(stokController.text.trim()) ??
-                                    0,
-                                'image':
-                                    selectedImage ?? barang['image'],
-                              };
-                            }
-                          } else {
-                            _barangList.add({
-                              'id': _barangList.length + 1,
-                              'nama': namaController.text.trim(),
-                              'stok':
-                                  int.tryParse(stokController.text.trim()) ?? 0,
-                              'image': selectedImage,
-                            });
-                          }
-                        });
-                        Navigator.pop(bottomSheetContext);
-                      },
+                              setModalState(() => isSubmitting = true);
+
+                              try {
+                                if (isEdit) {
+                                  // EKSEKUSI UPDATE (PUT)
+                                  await _apiService.updateItem(
+                                    id: barang.id,
+                                    name: namaController.text.trim(),
+                                    stock: stokController.text.trim(),
+                                    newImageFile:
+                                        selectedImage != barang.localImage
+                                            ? selectedImage
+                                            : null,
+                                  );
+                                } else {
+                                  // EKSEKUSI CREATE (POST)
+                                  await _apiService.createItem(
+                                    name: namaController.text.trim(),
+                                    stock: stokController.text.trim(),
+                                    imageFile: selectedImage!,
+                                  );
+                                }
+
+                                if (mounted) {
+                                  Navigator.pop(bottomSheetContext);
+                                  _showSnackBar(
+                                    context,
+                                    isEdit
+                                        ? 'Berhasil diperbarui!'
+                                        : 'Berhasil ditambahkan!',
+                                    isError: false,
+                                  );
+                                  _refreshData();
+                                }
+                              } catch (e) {
+                                if (mounted) {
+                                  _showSnackBar(
+                                    bottomSheetContext,
+                                    e.toString(),
+                                    isError: true,
+                                  );
+                                }
+                              } finally {
+                                setModalState(() => isSubmitting = false);
+                              }
+                            },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF2563EB),
-                        foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),
                         elevation: 0,
                       ),
-                      child: Text(
-                        isEdit ? 'Simpan Perubahan' : 'Tambah Barang',
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+                      child: isSubmitting
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : Text(
+                              isEdit ? 'Simpan Perubahan' : 'Tambah Barang',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                     ),
                   ),
                 ],
@@ -271,32 +352,9 @@ class _DataBarangPageState extends State<DataBarangPage> {
     );
   }
 
-  /// Menampilkan snackbar validasi di dalam bottom sheet
-  void _showValidationSnackBar(BuildContext ctx, String message) {
-    ScaffoldMessenger.of(ctx).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 20),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                message,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: const Color(0xFFEF4444),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
-  /// Menampilkan dialog konfirmasi untuk menghapus barang
+  // ==========================================
+  // DIALOG KONFIRMASI HAPUS
+  // ==========================================
   void _showHapusBarangDialog(int id) {
     showDialog(
       context: context,
@@ -317,12 +375,7 @@ class _DataBarangPageState extends State<DataBarangPage> {
             ),
           ),
           ElevatedButton(
-            onPressed: () {
-              setState(
-                () => _barangList.removeWhere((item) => item['id'] == id),
-              );
-              Navigator.pop(dialogContext);
-            },
+            onPressed: () => _prosesHapus(id, dialogContext),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFEF4444),
               foregroundColor: Colors.white,
@@ -345,7 +398,9 @@ class _DataBarangPageState extends State<DataBarangPage> {
       body: SafeArea(
         child: Column(
           children: [
-            // AppBar
+            // ==========================================
+            // APP BAR
+            // ==========================================
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
               decoration: const BoxDecoration(
@@ -399,7 +454,7 @@ class _DataBarangPageState extends State<DataBarangPage> {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      '${_barangList.length} item',
+                      '$_totalItems item',
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
@@ -410,7 +465,10 @@ class _DataBarangPageState extends State<DataBarangPage> {
                 ],
               ),
             ),
-            // Search
+
+            // ==========================================
+            // SEARCH BAR
+            // ==========================================
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
               child: Container(
@@ -442,117 +500,144 @@ class _DataBarangPageState extends State<DataBarangPage> {
                 ),
               ),
             ),
-            // List Barang
+
+            // ==========================================
+            // LIST BARANG — FutureBuilder
+            // ==========================================
             Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
-                itemCount: _barangList.length,
-                itemBuilder: (_, index) {
-                  final barang = _barangList[index];
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(18),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x08000000),
-                          blurRadius: 12,
-                          offset: Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          // Thumbnail gambar barang
-                          Container(
-                            width: 50,
-                            height: 50,
-                            decoration: BoxDecoration(
-                              gradient: barang['image'] == null
-                                  ? LinearGradient(
-                                      colors: [
-                                        const Color(0xFFEFF6FF),
-                                        const Color(0xFFDBEAFE),
-                                      ],
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    )
-                                  : null,
-                              borderRadius: BorderRadius.circular(14),
+              child: FutureBuilder<List<ItemModel>>(
+                future: _itemsFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFF2563EB),
+                      ),
+                    );
+                  } else if (snapshot.hasError) {
+                    return Center(
+                      child: Text(
+                        'Error: ${snapshot.error}',
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    );
+                  } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        'Belum ada data barang',
+                        style: TextStyle(color: Color(0xFF94A3B8)),
+                      ),
+                    );
+                  }
+
+                  final items = snapshot.data!;
+
+                  return ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
+                    itemCount: _totalItems,
+                    itemBuilder: (_, index) {
+                      final barang = items[index];
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(18),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x08000000),
+                              blurRadius: 12,
+                              offset: Offset(0, 4),
                             ),
-                            clipBehavior: Clip.antiAlias,
-                            child: barang['image'] != null
-                                ? Image.file(
-                                    barang['image'] as File,
-                                    fit: BoxFit.cover,
-                                    width: 50,
-                                    height: 50,
-                                  )
-                                : Icon(
-                                    Icons.inventory_2_rounded,
-                                    color: const Color(0xFF2563EB),
-                                    size: 24,
-                                  ),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  barang['nama'],
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w700,
-                                    color: Color(0xFF1E293B),
-                                  ),
+                          ],
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            children: [
+                              // Thumbnail gambar barang
+                              Container(
+                                width: 50,
+                                height: 50,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(14),
                                 ),
-                                const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    const SizedBox(width: 3),
-                                    const Icon(
-                                      Icons.layers_outlined,
-                                      size: 14,
-                                      color: Color(0xFF94A3B8),
-                                    ),
-                                    const SizedBox(width: 3),
-                                    Text(
-                                      'Stok: ${barang['stok']}',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: Color(0xFF94A3B8),
-                                        fontWeight: FontWeight.w500,
+                                clipBehavior: Clip.antiAlias,
+                                child: barang.imageUrl != null
+                                    ? Image.network(
+                                        barang.imageUrl!,
+                                        fit: BoxFit.cover,
+                                        errorBuilder:
+                                            (context, error, stackTrace) =>
+                                                const Icon(
+                                                  Icons.broken_image,
+                                                  color: Colors.grey,
+                                                ),
+                                      )
+                                    : const Icon(
+                                        Icons.inventory_2_rounded,
+                                        color: Color(0xFF2563EB),
+                                        size: 24,
                                       ),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      barang.name,
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFF1E293B),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      children: [
+                                        const SizedBox(width: 3),
+                                        const Icon(
+                                          Icons.layers_outlined,
+                                          size: 14,
+                                          color: Color(0xFF94A3B8),
+                                        ),
+                                        const SizedBox(width: 3),
+                                        Text(
+                                          'Stok: ${barang.stock}',
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: Color(0xFF94A3B8),
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _buildActionButton(
-                                Icons.edit_rounded,
-                                const Color(0xFFF59E0B),
-                                () => _showBarangFormDialog(barang: barang),
                               ),
-                              const SizedBox(width: 6),
-                              _buildActionButton(
-                                Icons.delete_rounded,
-                                const Color(0xFFEF4444),
-                                () => _showHapusBarangDialog(barang['id']),
+                              const SizedBox(width: 8),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildActionButton(
+                                    Icons.edit_rounded,
+                                    const Color(0xFFF59E0B),
+                                    () => _showBarangFormDialog(barang: barang),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  _buildActionButton(
+                                    Icons.delete_rounded,
+                                    const Color(0xFFEF4444),
+                                    () => _showHapusBarangDialog(barang.id),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
-                        ],
-                      ),
-                    ),
+                        ),
+                      );
+                    },
                   );
                 },
               ),
@@ -575,7 +660,6 @@ class _DataBarangPageState extends State<DataBarangPage> {
     );
   }
 
-  /// Tombol aksi kecil (edit/delete) di setiap item card
   Widget _buildActionButton(IconData icon, Color color, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,

@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:inventory_apps/models/item_model.dart';
+import 'package:inventory_apps/models/loan_model.dart';
+import 'package:inventory_apps/service/loan_service.dart';
 import 'package:inventory_apps/widgets/form/build_form_field.dart';
+
+// Import ItemService — sesuaikan path jika berbeda
+import 'package:inventory_apps/service/item_service.dart';
 
 class BuatPeminjamanPage extends StatefulWidget {
   const BuatPeminjamanPage({super.key});
@@ -12,20 +18,26 @@ class _BuatPeminjamanPageState extends State<BuatPeminjamanPage> {
   final namaController = TextEditingController();
   final jumlahController = TextEditingController();
 
-  // Data barang dari API (simulasi GET /items)
-  final List<Map<String, dynamic>> _itemList = [
-    {'id': 1, 'name': 'Laptop Dell XPS 15'},
-    {'id': 2, 'name': 'Proyektor Epson EB-X51'},
-    {'id': 3, 'name': 'Kamera Canon EOS M50'},
-    {'id': 4, 'name': 'Tripod Profesional'},
-    {'id': 5, 'name': 'Mic Wireless Boya'},
-    {'id': 6, 'name': 'Speaker JBL Portable'},
-    {'id': 7, 'name': 'Whiteboard 120x240'},
-    {'id': 8, 'name': 'Mouse Logitech MX'},
-  ];
+  // ==========================================
+  // SERVICE & STATE VARIABLES
+  // ==========================================
+  final LoanService _loanService = LoanService();
+  final ItemService _itemService = ItemService();
 
+  List<ItemModel> _itemList = [];
   int? _selectedItemId;
+  String _selectedItemName = 'Pilih Barang';
+
+  bool _isLoadingItems = false;
+  bool _isSubmitting = false;
+
   DateTime _selectedDate = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchItemsForDropdown();
+  }
 
   @override
   void dispose() {
@@ -34,7 +46,127 @@ class _BuatPeminjamanPageState extends State<BuatPeminjamanPage> {
     super.dispose();
   }
 
-  /// Membuka Date Picker untuk memilih tanggal peminjaman
+  // ==========================================
+  // FETCH BARANG UNTUK DROPDOWN
+  // ==========================================
+  Future<void> _fetchItemsForDropdown() async {
+    setState(() => _isLoadingItems = true);
+    try {
+      final items = await _itemService
+          .getItems(); // sesuai method di ItemService
+      setState(() => _itemList = items);
+    } catch (e) {
+      debugPrint('Gagal load item: $e');
+    }
+    setState(() => _isLoadingItems = false);
+  }
+
+  // ==========================================
+  // BOTTOM SHEET PICKER BARANG
+  // ==========================================
+  void _showItemPicker() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          height: MediaQuery.of(context).size.height * 0.5,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 24),
+                child: Text(
+                  'Pilih Barang',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E293B),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: _isLoadingItems
+                    ? const Center(child: CircularProgressIndicator())
+                    : ListView.builder(
+                        itemCount: _itemList.length,
+                        itemBuilder: (context, index) {
+                          final item = _itemList[index];
+                          return InkWell(
+                            onTap: () {
+                              setState(() {
+                                _selectedItemId = item.id;
+                                _selectedItemName = item.name;
+                              });
+                              Navigator.pop(context);
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 12,
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFEFF6FF),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Icon(
+                                      Icons.inventory_2_rounded,
+                                      color: Color(0xFF2563EB),
+                                      size: 20,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          item.name,
+                                          style: const TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
+                                            color: Color(0xFF1E293B),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Stok tersedia: ${item.stock} unit',
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: Color(0xFF94A3B8),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // ==========================================
+  // DATE PICKER
+  // ==========================================
   Future<void> _pickDate() async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -56,120 +188,70 @@ class _BuatPeminjamanPageState extends State<BuatPeminjamanPage> {
       },
     );
     if (picked != null && picked != _selectedDate) {
-      setState(() {
-        _selectedDate = picked;
-      });
+      setState(() => _selectedDate = picked);
     }
   }
 
-  /// Format tanggal untuk ditampilkan
   String _formatDate(DateTime date) {
-    final months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-      'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mei',
+      'Jun',
+      'Jul',
+      'Agu',
+      'Sep',
+      'Okt',
+      'Nov',
+      'Des',
     ];
     return '${date.day.toString().padLeft(2, '0')} ${months[date.month - 1]} ${date.year}';
   }
 
-  /// Format tanggal untuk API (yyyy-MM-dd)
-  String _formatDateForApi(DateTime date) {
-    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-  }
-
-  /// Mengirim data peminjaman dan menampilkan dialog sukses
-  void _submitPeminjaman() {
+  // ==========================================
+  // SUBMIT KE API (POST)
+  // ==========================================
+  Future<void> _submitPeminjaman() async {
     if (!_formKey.currentState!.validate()) return;
 
     if (_selectedItemId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.white, size: 20),
-              SizedBox(width: 8),
-              Text(
-                'Pilih barang terlebih dahulu!',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-          backgroundColor: const Color(0xFFEF4444),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          margin: const EdgeInsets.all(16),
-          duration: const Duration(seconds: 2),
+        const SnackBar(
+          content: Text('Pilih barang terlebih dahulu!'),
+          backgroundColor: Color(0xFFEF4444),
         ),
       );
       return;
     }
 
-    // Data yang siap dikirim ke API
-    final apiData = {
-      'item_id': _selectedItemId,
-      'qty': int.tryParse(jumlahController.text) ?? 0,
-      'date': _formatDateForApi(_selectedDate),
-    };
+    setState(() => _isSubmitting = true);
 
-    debugPrint('API Data: $apiData');
-
-    // Nama barang untuk ditampilkan di dialog sukses
-    final selectedItemName = _itemList.firstWhere(
-      (item) => item['id'] == _selectedItemId,
-    )['name'];
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 12),
-            Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF2563EB), Color(0xFF3B82F6)],
-                ),
-                borderRadius: BorderRadius.circular(22),
-              ),
-              child: const Icon(Icons.check_rounded, color: Colors.white, size: 40),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Peminjaman Berhasil!',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF1E293B)),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '$selectedItemName berhasil dipinjamkan kepada ${namaController.text}',
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(dialogContext);
-                  Navigator.pop(context);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2563EB),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  elevation: 0,
-                ),
-                child: const Text('Kembali ke Dashboard', style: TextStyle(fontWeight: FontWeight.w700)),
-              ),
-            ),
-          ],
-        ),
-      ),
+    final isSuccess = await _loanService.createLoan(
+      itemId: _selectedItemId!,
+      name: namaController.text,
+      totalItem: int.parse(jumlahController.text),
+      date: _selectedDate,
     );
+
+    setState(() => _isSubmitting = false);
+
+    if (isSuccess) {
+      Navigator.pop(
+        context,
+        true,
+      ); // Kirim true → refresh list di halaman sebelumnya
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Gagal membuat peminjaman. Cek kembali data atau stok.',
+          ),
+          backgroundColor: Color(0xFFEF4444),
+        ),
+      );
+    }
   }
 
   @override
@@ -184,7 +266,13 @@ class _BuatPeminjamanPageState extends State<BuatPeminjamanPage> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
               decoration: const BoxDecoration(
                 color: Colors.white,
-                boxShadow: [BoxShadow(color: Color(0x0A000000), blurRadius: 8, offset: Offset(0, 2))],
+                boxShadow: [
+                  BoxShadow(
+                    color: Color(0x0A000000),
+                    blurRadius: 8,
+                    offset: Offset(0, 2),
+                  ),
+                ],
               ),
               child: Row(
                 children: [
@@ -197,14 +285,22 @@ class _BuatPeminjamanPageState extends State<BuatPeminjamanPage> {
                         color: const Color(0xFFF1F5F9),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(Icons.arrow_back_ios_new_rounded, size: 16, color: Color(0xFF475569)),
+                      child: const Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        size: 16,
+                        color: Color(0xFF475569),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 14),
                   const Expanded(
                     child: Text(
                       'Buat Peminjaman',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF1E293B)),
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF1E293B),
+                      ),
                     ),
                   ),
                 ],
@@ -220,7 +316,7 @@ class _BuatPeminjamanPageState extends State<BuatPeminjamanPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Header illustration
+                      // Header banner
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(24),
@@ -233,7 +329,9 @@ class _BuatPeminjamanPageState extends State<BuatPeminjamanPage> {
                           borderRadius: BorderRadius.circular(22),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF2563EB).withValues(alpha: 0.3),
+                              color: const Color(
+                                0xFF2563EB,
+                              ).withValues(alpha: 0.3),
                               blurRadius: 16,
                               offset: const Offset(0, 6),
                             ),
@@ -248,7 +346,11 @@ class _BuatPeminjamanPageState extends State<BuatPeminjamanPage> {
                                 color: Colors.white.withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(16),
                               ),
-                              child: const Icon(Icons.add_circle_outline_rounded, color: Colors.white, size: 28),
+                              child: const Icon(
+                                Icons.add_circle_outline_rounded,
+                                color: Colors.white,
+                                size: 28,
+                              ),
                             ),
                             const SizedBox(width: 16),
                             const Expanded(
@@ -257,12 +359,20 @@ class _BuatPeminjamanPageState extends State<BuatPeminjamanPage> {
                                 children: [
                                   Text(
                                     'Form Peminjaman Baru',
-                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white),
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                    ),
                                   ),
                                   SizedBox(height: 4),
                                   Text(
                                     'Isi data di bawah untuk mencatat peminjaman barang',
-                                    style: TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.w500),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.white70,
+                                      fontWeight: FontWeight.w500,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -273,10 +383,13 @@ class _BuatPeminjamanPageState extends State<BuatPeminjamanPage> {
 
                       const SizedBox(height: 28),
 
-                      // Form fields
                       const Text(
                         'Informasi Peminjam',
-                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF1E293B)),
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF1E293B),
+                        ),
                       ),
                       const SizedBox(height: 14),
 
@@ -285,70 +398,64 @@ class _BuatPeminjamanPageState extends State<BuatPeminjamanPage> {
                         controller: namaController,
                         label: 'Nama Peminjam',
                         icon: Icons.person_outline_rounded,
-                        validator: (value) => value == null || value.isEmpty ? 'Nama peminjam wajib diisi' : null,
+                        validator: (value) => value == null || value.isEmpty
+                            ? 'Nama peminjam wajib diisi'
+                            : null,
                       ),
                       const SizedBox(height: 14),
 
-                      // Dropdown Nama Barang (item_id)
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x08000000),
-                              blurRadius: 10,
-                              offset: Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: DropdownButtonFormField<int>(
-                          initialValue: _selectedItemId,
-                          decoration: InputDecoration(
-                            labelText: 'Pilih Barang',
-                            labelStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
-                            prefixIcon: const Padding(
-                              padding: EdgeInsets.only(left: 14, right: 10),
-                              child: Icon(Icons.inventory_2_outlined, color: Color(0xFF94A3B8), size: 22),
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              borderSide: const BorderSide(color: Color(0xFF2563EB), width: 2),
-                            ),
-                            errorBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              borderSide: const BorderSide(color: Color(0xFFEF4444)),
-                            ),
-                            filled: true,
-                            fillColor: Colors.white,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      // ==========================================
+                      // DROPDOWN BARANG → Bottom Sheet Picker
+                      // ==========================================
+                      GestureDetector(
+                        onTap: _isLoadingItems ? null : _showItemPicker,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 16,
                           ),
-                          validator: (value) => value == null ? 'Pilih barang wajib diisi' : null,
-                          icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF94A3B8)),
-                          dropdownColor: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          items: _itemList.map((item) {
-                            return DropdownMenuItem<int>(
-                              value: item['id'] as int,
-                              child: Text(
-                                item['name'] as String,
-                                style: const TextStyle(fontSize: 14, color: Color(0xFF1E293B)),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x08000000),
+                                blurRadius: 10,
+                                offset: Offset(0, 4),
                               ),
-                            );
-                          }).toList(),
-                          onChanged: (value) {
-                            setState(() {
-                              _selectedItemId = value;
-                            });
-                          },
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.inventory_2_outlined,
+                                color: Color(0xFF94A3B8),
+                                size: 22,
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Text(
+                                  _isLoadingItems
+                                      ? 'Memuat data...'
+                                      : _selectedItemName,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: _selectedItemId == null
+                                        ? const Color(0xFF94A3B8)
+                                        : const Color(0xFF1E293B),
+                                    fontWeight: _selectedItemId == null
+                                        ? FontWeight.normal
+                                        : FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              const Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                color: Color(0xFF94A3B8),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                       const SizedBox(height: 14),
@@ -360,14 +467,18 @@ class _BuatPeminjamanPageState extends State<BuatPeminjamanPage> {
                         icon: Icons.numbers,
                         isNumber: true,
                         validator: (value) {
-                          if (value == null || value.isEmpty) return 'Jumlah wajib diisi';
-                          if (int.tryParse(value) == null) return 'Masukkan angka yang valid';
+                          if (value == null || value.isEmpty) {
+                            return 'Jumlah wajib diisi';
+                          }
+                          if (int.tryParse(value) == null) {
+                            return 'Masukkan angka yang valid';
+                          }
                           return null;
                         },
                       ),
                       const SizedBox(height: 14),
 
-                      // Tanggal Peminjaman (Date Picker)
+                      // Tanggal Peminjaman
                       GestureDetector(
                         onTap: _pickDate,
                         child: Container(
@@ -384,12 +495,19 @@ class _BuatPeminjamanPageState extends State<BuatPeminjamanPage> {
                             ],
                             border: Border.all(color: const Color(0xFFE2E8F0)),
                           ),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 16,
+                          ),
                           child: Row(
                             children: [
                               const Padding(
                                 padding: EdgeInsets.only(right: 10),
-                                child: Icon(Icons.calendar_month_rounded, color: Color(0xFF94A3B8), size: 22),
+                                child: Icon(
+                                  Icons.calendar_month_rounded,
+                                  color: Color(0xFF94A3B8),
+                                  size: 22,
+                                ),
                               ),
                               Expanded(
                                 child: Column(
@@ -416,7 +534,10 @@ class _BuatPeminjamanPageState extends State<BuatPeminjamanPage> {
                                 ),
                               ),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 5,
+                                ),
                                 decoration: BoxDecoration(
                                   color: const Color(0xFFEFF6FF),
                                   borderRadius: BorderRadius.circular(8),
@@ -437,21 +558,40 @@ class _BuatPeminjamanPageState extends State<BuatPeminjamanPage> {
 
                       const SizedBox(height: 32),
 
-                      // Submit button
+                      // ==========================================
+                      // SUBMIT BUTTON dengan loading state
+                      // ==========================================
                       SizedBox(
                         width: double.infinity,
                         height: 56,
                         child: ElevatedButton.icon(
-                          onPressed: _submitPeminjaman,
-                          icon: const Icon(Icons.send_rounded),
-                          label: const Text(
-                            'Kirim Peminjaman',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                          ),
+                          onPressed: _isSubmitting ? null : _submitPeminjaman,
+                          icon: _isSubmitting
+                              ? const SizedBox.shrink()
+                              : const Icon(Icons.send_rounded),
+                          label: _isSubmitting
+                              ? const SizedBox(
+                                  height: 24,
+                                  width: 24,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 3,
+                                  ),
+                                )
+                              : const Text(
+                                  'Kirim Peminjaman',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF2563EB),
                             foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            disabledBackgroundColor: const Color(0xFF93C5FD),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
                             elevation: 0,
                           ),
                         ),
